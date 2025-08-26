@@ -1,0 +1,9 @@
+{
+  "name": "Reveal Cell Cam",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["camera"],
+  "country": ["US"],
+  "homeassistant": "2024.1.0",
+  "iot_class": "Cloud Polling"
+}

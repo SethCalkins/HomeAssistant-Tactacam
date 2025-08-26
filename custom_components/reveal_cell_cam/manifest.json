@@ -1,0 +1,11 @@
+{
+  "domain": "reveal_cell_cam",
+  "name": "Reveal Cell Cam",
+  "codeowners": ["@sethcalkins"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/sethcalkins/reveal_cell_cam",
+  "iot_class": "cloud_polling",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "1.0.0"
+}

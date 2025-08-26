@@ -1,0 +1,16 @@
+refresh_camera:
+  name: Refresh Camera
+  description: Manually refresh photos from a specific camera
+  fields:
+    entity_id:
+      name: Camera Entity
+      description: The camera entity to refresh
+      required: true
+      selector:
+        entity:
+          integration: reveal_cell_cam
+          domain: camera
+
+refresh_all:
+  name: Refresh All Cameras
+  description: Manually refresh photos from all cameras
