@@ -41,7 +41,8 @@ async def async_setup_entry(
     if coordinator.data and "cameras" in coordinator.data:
         for camera in coordinator.data["cameras"]:
             camera_id = camera.get("cameraId")
-            camera_name = camera.get("cameraName", "Unknown")
+            # Try multiple fields for camera name
+            camera_name = camera.get("cameraName") or camera.get("cameraLocation") or camera.get("name") or f"Camera {camera_id[-4:]}"
             
             # Create sensors for each camera
             sensors.extend([
@@ -75,9 +76,10 @@ class RevealSensorBase(CoordinatorEntity, SensorEntity):
         self._camera_name = camera_name
         self._sensor_type = sensor_type
         self._attr_unique_id = f"reveal_{camera_id}_{sensor_type}"
+        self._attr_has_entity_name = True
         self._attr_device_info = {
             "identifiers": {(DOMAIN, camera_id)},
-            "name": f"Reveal {camera_name}",
+            "name": camera_name,
             "manufacturer": "Tactacam",
             "model": "Reveal Cell Cam",
         }
@@ -107,7 +109,7 @@ class RevealBatterySensor(RevealSensorBase):
     ) -> None:
         """Initialize the battery sensor."""
         super().__init__(coordinator, camera_id, camera_name, "battery")
-        self._attr_name = f"{camera_name} Battery"
+        self._attr_name = "Battery"
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -152,7 +154,7 @@ class RevealSignalSensor(RevealSensorBase):
     ) -> None:
         """Initialize the signal sensor."""
         super().__init__(coordinator, camera_id, camera_name, "signal")
-        self._attr_name = f"{camera_name} Signal"
+        self._attr_name = "Signal"
         self._attr_icon = "mdi:signal"
 
     @property
@@ -204,7 +206,7 @@ class RevealTemperatureSensor(RevealSensorBase):
     ) -> None:
         """Initialize the temperature sensor."""
         super().__init__(coordinator, camera_id, camera_name, "temperature")
-        self._attr_name = f"{camera_name} Temperature"
+        self._attr_name = "Temperature"
         self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -213,8 +215,15 @@ class RevealTemperatureSensor(RevealSensorBase):
     def native_value(self) -> Optional[float]:
         """Return the temperature."""
         photo = self._get_latest_photo()
-        if photo and "weatherData" in photo:
-            temp = photo["weatherData"].get("currentTemp")
+        
+        # Try different field names for weather data
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            # Try different field names for temperature
+            temp = weather_data.get("currentTemp") or weather_data.get("temperature") or weather_data.get("temp")
             if temp is not None:
                 try:
                     return float(temp)
@@ -229,14 +238,28 @@ class RevealTemperatureSensor(RevealSensorBase):
         attrs = {}
         photo = self._get_latest_photo()
         
-        if photo and "weatherData" in photo:
-            weather = photo["weatherData"]
-            if "tempMin12hr" in weather:
-                attrs["12hr_min"] = weather["tempMin12hr"]
-            if "tempMax12hr" in weather:
-                attrs["12hr_max"] = weather["tempMax12hr"]
-            if "tempDepature24hr" in weather:
-                attrs["24hr_departure"] = weather["tempDepature24hr"]
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            # Try different field names for temperature range
+            if "tempMin12hr" in weather_data:
+                attrs["12hr_min"] = weather_data["tempMin12hr"]
+            elif "temperatureRange12Hours" in weather_data:
+                temp_range = weather_data["temperatureRange12Hours"]
+                if "min" in temp_range:
+                    attrs["12hr_min"] = temp_range["min"]
+                if "max" in temp_range:
+                    attrs["12hr_max"] = temp_range["max"]
+            
+            if "tempMax12hr" in weather_data:
+                attrs["12hr_max"] = weather_data["tempMax12hr"]
+            
+            if "tempDepature24hr" in weather_data:
+                attrs["24hr_departure"] = weather_data["tempDepature24hr"]
+            elif "past24HoursTemperatureDeparture" in weather_data:
+                attrs["24hr_departure"] = weather_data["past24HoursTemperatureDeparture"]
         
         return attrs
 
@@ -249,7 +272,7 @@ class RevealPhotoCountSensor(RevealSensorBase):
     ) -> None:
         """Initialize the photo count sensor."""
         super().__init__(coordinator, camera_id, camera_name, "photo_count")
-        self._attr_name = f"{camera_name} Photo Count"
+        self._attr_name = "Photo Count"
         self._attr_icon = "mdi:camera"
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
 
@@ -290,7 +313,7 @@ class RevealWindSpeedSensor(RevealSensorBase):
     ) -> None:
         """Initialize the wind speed sensor."""
         super().__init__(coordinator, camera_id, camera_name, "wind_speed")
-        self._attr_name = f"{camera_name} Wind Speed"
+        self._attr_name = "Wind Speed"
         self._attr_native_unit_of_measurement = UnitOfSpeed.MILES_PER_HOUR
         self._attr_device_class = SensorDeviceClass.WIND_SPEED
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -299,13 +322,29 @@ class RevealWindSpeedSensor(RevealSensorBase):
     def native_value(self) -> Optional[float]:
         """Return the wind speed."""
         photo = self._get_latest_photo()
-        if photo and "weatherData" in photo:
-            speed = photo["weatherData"].get("windSpeed")
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            # Try direct windSpeed field
+            speed = weather_data.get("windSpeed")
             if speed is not None:
                 try:
                     return float(speed)
                 except (ValueError, TypeError):
                     pass
+            
+            # Try windDirection object
+            wind_dir = weather_data.get("windDirection")
+            if wind_dir and isinstance(wind_dir, dict):
+                speed = wind_dir.get("speed")
+                if speed is not None:
+                    try:
+                        return float(speed)
+                    except (ValueError, TypeError):
+                        pass
         
         return None
 
@@ -315,12 +354,21 @@ class RevealWindSpeedSensor(RevealSensorBase):
         attrs = {}
         photo = self._get_latest_photo()
         
-        if photo and "weatherData" in photo:
-            weather = photo["weatherData"]
-            if "windDirection" in weather:
-                attrs["direction"] = weather["windDirection"]
-            if "windGust" in weather:
-                attrs["gust_speed"] = weather["windGust"]
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            # Handle wind direction as string or object
+            wind_dir = weather_data.get("windDirection")
+            if wind_dir:
+                if isinstance(wind_dir, dict):
+                    attrs["direction"] = wind_dir.get("cardinalLabel") or wind_dir.get("direction")
+                else:
+                    attrs["direction"] = wind_dir
+            
+            if "windGust" in weather_data:
+                attrs["gust_speed"] = weather_data["windGust"]
         
         return attrs
 
@@ -333,7 +381,7 @@ class RevealPressureSensor(RevealSensorBase):
     ) -> None:
         """Initialize the pressure sensor."""
         super().__init__(coordinator, camera_id, camera_name, "pressure")
-        self._attr_name = f"{camera_name} Pressure"
+        self._attr_name = "Pressure"
         self._attr_native_unit_of_measurement = UnitOfPressure.INHG
         self._attr_device_class = SensorDeviceClass.ATMOSPHERIC_PRESSURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -342,8 +390,13 @@ class RevealPressureSensor(RevealSensorBase):
     def native_value(self) -> Optional[float]:
         """Return the barometric pressure."""
         photo = self._get_latest_photo()
-        if photo and "weatherData" in photo:
-            pressure = photo["weatherData"].get("barometricPressure")
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            pressure = weather_data.get("barometricPressure") or weather_data.get("pressure")
             if pressure is not None:
                 try:
                     return float(pressure)
@@ -358,10 +411,13 @@ class RevealPressureSensor(RevealSensorBase):
         attrs = {}
         photo = self._get_latest_photo()
         
-        if photo and "weatherData" in photo:
-            weather = photo["weatherData"]
-            if "pressureTendency" in weather:
-                attrs["tendency"] = weather["pressureTendency"]
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            if "pressureTendency" in weather_data:
+                attrs["tendency"] = weather_data["pressureTendency"]
         
         return attrs
 
@@ -374,15 +430,20 @@ class RevealMoonPhaseSensor(RevealSensorBase):
     ) -> None:
         """Initialize the moon phase sensor."""
         super().__init__(coordinator, camera_id, camera_name, "moon_phase")
-        self._attr_name = f"{camera_name} Moon Phase"
+        self._attr_name = "Moon Phase"
         self._attr_icon = "mdi:moon-waxing-crescent"
 
     @property
     def native_value(self) -> Optional[str]:
         """Return the moon phase."""
         photo = self._get_latest_photo()
-        if photo and "weatherData" in photo:
-            return photo["weatherData"].get("moonPhase")
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            return weather_data.get("moonPhase") or weather_data.get("moon_phase")
         
         return None
 
@@ -392,10 +453,15 @@ class RevealMoonPhaseSensor(RevealSensorBase):
         attrs = {}
         photo = self._get_latest_photo()
         
-        if photo and "weatherData" in photo:
-            weather = photo["weatherData"]
-            if "sunPhase" in weather:
-                attrs["sun_phase"] = weather["sunPhase"]
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            if "sunPhase" in weather_data:
+                attrs["sun_phase"] = weather_data["sunPhase"]
+            elif "sun_phase" in weather_data:
+                attrs["sun_phase"] = weather_data["sun_phase"]
         
         return attrs
 
@@ -408,15 +474,20 @@ class RevealWeatherSensor(RevealSensorBase):
     ) -> None:
         """Initialize the weather sensor."""
         super().__init__(coordinator, camera_id, camera_name, "weather")
-        self._attr_name = f"{camera_name} Weather"
+        self._attr_name = "Weather"
         self._attr_icon = "mdi:weather-partly-cloudy"
 
     @property
     def native_value(self) -> Optional[str]:
         """Return the weather condition."""
         photo = self._get_latest_photo()
-        if photo and "weatherData" in photo:
-            return photo["weatherData"].get("weather")
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            return weather_data.get("weather") or weather_data.get("weatherLabel") or weather_data.get("conditions")
         
         return None
 
@@ -429,7 +500,7 @@ class RevealLastPhotoSensor(RevealSensorBase):
     ) -> None:
         """Initialize the last photo sensor."""
         super().__init__(coordinator, camera_id, camera_name, "last_photo")
-        self._attr_name = f"{camera_name} Last Photo"
+        self._attr_name = "Last Photo"
         self._attr_icon = "mdi:camera-timer"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
