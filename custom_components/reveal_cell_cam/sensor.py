@@ -1,5 +1,6 @@
 """Sensor platform for Reveal Cell Cam."""
 import logging
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from homeassistant.components.sensor import (
@@ -21,6 +22,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -432,11 +434,20 @@ class RevealLastPhotoSensor(RevealSensorBase):
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
-    def native_value(self) -> Optional[str]:
+    def native_value(self) -> Optional[datetime]:
         """Return the last photo timestamp."""
         photo = self._get_latest_photo()
-        if photo:
-            return photo.get("photoDateUtc")
+        if photo and "photoDateUtc" in photo:
+            timestamp_str = photo.get("photoDateUtc")
+            if timestamp_str:
+                try:
+                    # Parse ISO format timestamp
+                    if timestamp_str.endswith('Z'):
+                        timestamp_str = timestamp_str[:-1] + '+00:00'
+                    return datetime.fromisoformat(timestamp_str)
+                except (ValueError, TypeError) as err:
+                    _LOGGER.debug("Failed to parse timestamp %s: %s", timestamp_str, err)
+                    return None
         
         return None
 

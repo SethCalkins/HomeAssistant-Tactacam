@@ -236,10 +236,20 @@ class RevealCellCamAPI:
                 if response.status == 200:
                     data = await response.json()
                     photos = data.get("response", {}).get("photos", [])
-                    _LOGGER.debug("Retrieved %d photos", len(photos))
+                    _LOGGER.debug("Retrieved %d photos for camera %s", len(photos), camera_id or "all")
+                    
+                    # Log first photo details for debugging
+                    if photos and len(photos) > 0:
+                        first_photo = photos[0]
+                        _LOGGER.debug("First photo has weatherData: %s, metadata: %s", 
+                                    "weatherData" in first_photo,
+                                    "metadata" in first_photo)
+                    
                     return photos
                 else:
                     _LOGGER.error("Failed to get photos: HTTP %s", response.status)
+                    text = await response.text()
+                    _LOGGER.debug("Response: %s", text[:500])
                     return []
                 
         except aiohttp.ClientError as err:
@@ -319,33 +329,30 @@ class RevealCellCamAPI:
             _LOGGER.warning("No cameras found")
             return {"cameras": [], "photos": []}
         
-        # Get latest photos for all cameras
-        all_photos = await self.get_photos(size=100)
-        
-        # Create a mapping of camera_id to latest photo and stats
-        latest_photos = {}
-        camera_stats = {}
-        
-        for photo in all_photos:
-            camera_id = photo.get("cameraId")
-            if camera_id and camera_id not in latest_photos:
-                latest_photos[camera_id] = photo
-        
-        # Get stats for each camera
+        # Get latest photo for each camera individually to ensure weather data
         for camera in cameras:
             camera_id = camera.get("cameraId")
             if camera_id:
-                # Add latest photo
-                if camera_id in latest_photos:
-                    camera["latest_photo"] = latest_photos[camera_id]
+                # Get latest photo with weather data for this specific camera
+                latest_photo = await self.get_latest_photo_for_camera(camera_id)
+                if latest_photo:
+                    camera["latest_photo"] = latest_photo
+                    _LOGGER.debug("Camera %s has latest photo with weather data: %s", 
+                                camera_id, 
+                                "weatherData" in latest_photo)
+                else:
+                    _LOGGER.warning("No photos found for camera %s", camera_id)
                 
                 # Add stats
                 stats = await self._calculate_camera_stats(camera_id)
                 camera["stats"] = stats
         
+        # Also get a batch of recent photos for history
+        all_photos = await self.get_photos(size=20)
+        
         return {
             "cameras": cameras,
-            "photos": all_photos[:20]  # Keep last 20 photos for history
+            "photos": all_photos  # Keep last 20 photos for history
         }
 
     async def close(self) -> None:
