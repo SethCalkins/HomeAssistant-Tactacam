@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, HARDWARE_MODEL_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,13 +71,17 @@ class RevealCellCamCamera(CoordinatorEntity, Camera):
         self._attr_supported_features = CameraEntityFeature(0)
         
         # Device info with more details
+        # Get model name from hardware version mapping
+        hw_version = camera_data.get("hardwareVersion")
+        model_name = HARDWARE_MODEL_MAP.get(hw_version, camera_data.get("cameraModel", "Reveal Cell Cam"))
+        
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._camera_id)},
             name=self._camera_name,  # Use camera name directly for device
             manufacturer="Tactacam",
-            model=camera_data.get("cameraModel", "Reveal Cell Cam"),
+            model=model_name,
             sw_version=camera_data.get("firmwareVersion"),
-            hw_version=camera_data.get("hardwareVersion"),
+            hw_version=hw_version,
         )
         
         _LOGGER.debug("Initialized camera entity: %s with unique_id: %s", self._attr_name, self._attr_unique_id)

@@ -25,7 +25,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, HARDWARE_MODEL_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +70,7 @@ async def async_setup_entry(
                 RevealPhotosTakenSensor(coordinator, camera_id, camera_name),
                 RevealStoredPhotosSensor(coordinator, camera_id, camera_name),
                 RevealWarrantyExpirationSensor(coordinator, camera_id, camera_name),
+                RevealCameraModelSensor(coordinator, camera_id, camera_name),
             ])
     
     async_add_entities(sensors)
@@ -1404,5 +1405,53 @@ class RevealWarrantyExpirationSensor(RevealSensorBase):
         # Add first activation date
         if "firstActivationTime" in camera_data:
             attrs["first_activated"] = camera_data["firstActivationTime"]
+        
+        return attrs
+
+
+class RevealCameraModelSensor(RevealSensorBase):
+    """Camera model sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the camera model sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "model")
+        self._attr_name = "Camera Model"
+        self._attr_icon = "mdi:camera"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the camera model."""
+        camera_data = self._get_camera_data()
+        
+        # Try to get model from hardware version mapping
+        hw_version = camera_data.get("hardwareVersion")
+        if hw_version and hw_version in HARDWARE_MODEL_MAP:
+            return HARDWARE_MODEL_MAP[hw_version]
+        
+        # Fall back to cameraModel field if available
+        return camera_data.get("cameraModel", "Unknown Model")
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        # Add hardware version
+        if "hardwareVersion" in camera_data:
+            attrs["hardware_version"] = camera_data["hardwareVersion"]
+        
+        # Add firmware version
+        if "firmwareVersion" in camera_data:
+            attrs["firmware_version"] = camera_data["firmwareVersion"]
+        
+        # Add camera ID
+        attrs["camera_id"] = self._camera_id
+        
+        # Add serial number if available
+        if "serialNumber" in camera_data:
+            attrs["serial_number"] = camera_data["serialNumber"]
         
         return attrs
