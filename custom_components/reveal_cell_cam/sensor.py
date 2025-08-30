@@ -15,6 +15,7 @@ from homeassistant.const import (
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -55,6 +56,18 @@ async def async_setup_entry(
                 RevealMoonPhaseSensor(coordinator, camera_id, camera_name),
                 RevealWeatherSensor(coordinator, camera_id, camera_name),
                 RevealLastPhotoSensor(coordinator, camera_id, camera_name),
+                RevealSDCardUsageSensor(coordinator, camera_id, camera_name),
+                RevealCameraUptimeSensor(coordinator, camera_id, camera_name),
+                RevealGPSCoordinatesSensor(coordinator, camera_id, camera_name),
+                RevealSIMCarrierSensor(coordinator, camera_id, camera_name),
+                RevealInternalVoltageSensor(coordinator, camera_id, camera_name),
+                RevealExternalVoltageSensor(coordinator, camera_id, camera_name),
+                RevealFirmwareVersionSensor(coordinator, camera_id, camera_name),
+                RevealCameraTemperatureSensor(coordinator, camera_id, camera_name),
+                RevealServingCellSensor(coordinator, camera_id, camera_name),
+                RevealCameraSettingsSensor(coordinator, camera_id, camera_name),
+                RevealPhotosTakenSensor(coordinator, camera_id, camera_name),
+                RevealStoredPhotosSensor(coordinator, camera_id, camera_name),
             ])
     
     async_add_entities(sensors)
@@ -533,5 +546,714 @@ class RevealLastPhotoSensor(RevealSensorBase):
                 attrs["filename"] = photo["photoName"]
             if "metadata" in photo and "gpsLatitude" in photo["metadata"]:
                 attrs["gps_location"] = f"{photo['metadata'].get('gpsLatitude')}, {photo['metadata'].get('gpsLongitude')}"
+        
+        return attrs
+
+
+class RevealSDCardUsageSensor(RevealSensorBase):
+    """SD Card usage sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the SD card usage sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "sd_card_usage")
+        self._attr_name = "SD Card Usage"
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        self._attr_icon = "mdi:micro-sd"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the SD card usage percentage."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            memory = status.get("memory")
+            memory_limit = status.get("memoryLimit")
+            
+            if memory is not None and memory_limit is not None and memory_limit > 0:
+                try:
+                    usage_percent = (float(memory) / float(memory_limit)) * 100
+                    return round(usage_percent, 1)
+                except (ValueError, TypeError, ZeroDivisionError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            if "memory" in status:
+                attrs["used_mb"] = status["memory"]
+            if "memoryLimit" in status:
+                attrs["total_mb"] = status["memoryLimit"]
+            
+            memory = status.get("memory")
+            memory_limit = status.get("memoryLimit")
+            if memory is not None and memory_limit is not None:
+                attrs["free_mb"] = memory_limit - memory
+        
+        return attrs
+
+
+class RevealCameraUptimeSensor(RevealSensorBase):
+    """Camera uptime sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the camera uptime sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "camera_uptime")
+        self._attr_name = "Camera Uptime"
+        self._attr_native_unit_of_measurement = UnitOfTime.HOURS
+        self._attr_icon = "mdi:timer-outline"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the camera uptime in hours."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            last_transmission = status.get("lastTransmissionTimestamp")
+            
+            if last_transmission is not None:
+                try:
+                    # Convert milliseconds timestamp to datetime
+                    last_transmission_dt = datetime.fromtimestamp(last_transmission / 1000, tz=dt_util.UTC)
+                    current_time = dt_util.utcnow()
+                    
+                    # Calculate uptime in hours
+                    uptime_delta = current_time - last_transmission_dt
+                    uptime_hours = uptime_delta.total_seconds() / 3600
+                    
+                    # If uptime is negative or very large, return None
+                    if uptime_hours < 0 or uptime_hours > 8760:  # More than a year
+                        return None
+                    
+                    return round(uptime_hours, 2)
+                except (ValueError, TypeError, OSError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            if "lastTransmissionTimestamp" in status:
+                try:
+                    timestamp = status["lastTransmissionTimestamp"]
+                    last_transmission_dt = datetime.fromtimestamp(timestamp / 1000, tz=dt_util.UTC)
+                    attrs["last_transmission"] = last_transmission_dt.isoformat()
+                    
+                    # Calculate days, hours, minutes
+                    current_time = dt_util.utcnow()
+                    uptime_delta = current_time - last_transmission_dt
+                    
+                    if uptime_delta.total_seconds() > 0:
+                        days = uptime_delta.days
+                        hours = uptime_delta.seconds // 3600
+                        minutes = (uptime_delta.seconds % 3600) // 60
+                        attrs["uptime_formatted"] = f"{days}d {hours}h {minutes}m"
+                except (ValueError, TypeError, OSError):
+                    pass
+        
+        return attrs
+
+
+class RevealGPSCoordinatesSensor(RevealSensorBase):
+    """GPS coordinates sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the GPS coordinates sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "gps_coordinates")
+        self._attr_name = "GPS Coordinates"
+        self._attr_icon = "mdi:map-marker"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the GPS coordinates."""
+        camera_data = self._get_camera_data()
+        
+        if "gps" in camera_data:
+            gps = camera_data["gps"]
+            latitude = gps.get("latitude")
+            longitude = gps.get("longitude")
+            
+            if latitude is not None and longitude is not None:
+                try:
+                    lat = float(latitude)
+                    lon = float(longitude)
+                    return f"{lat:.5f}, {lon:.5f}"
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "gps" in camera_data:
+            gps = camera_data["gps"]
+            
+            if "latitude" in gps:
+                try:
+                    attrs["latitude"] = float(gps["latitude"])
+                except (ValueError, TypeError):
+                    attrs["latitude"] = gps["latitude"]
+            
+            if "longitude" in gps:
+                try:
+                    attrs["longitude"] = float(gps["longitude"])
+                except (ValueError, TypeError):
+                    attrs["longitude"] = gps["longitude"]
+            
+            if "lastUpdatedTimestamp" in gps:
+                attrs["last_gps_update"] = gps["lastUpdatedTimestamp"]
+            
+            # Add Google Maps link
+            if "latitude" in attrs and "longitude" in attrs:
+                lat = attrs["latitude"]
+                lon = attrs["longitude"]
+                attrs["google_maps_link"] = f"https://maps.google.com/?q={lat},{lon}"
+        
+        return attrs
+
+
+class RevealSIMCarrierSensor(RevealSensorBase):
+    """SIM carrier sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the SIM carrier sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "sim_carrier")
+        self._attr_name = "SIM Carrier"
+        self._attr_icon = "mdi:sim"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the active SIM carrier."""
+        camera_data = self._get_camera_data()
+        
+        # Try status.eSim array first
+        if "status" in camera_data:
+            status = camera_data["status"]
+            esim = status.get("eSim", [])
+            
+            for sim in esim:
+                if sim.get("activeFlag") == 1:
+                    return sim.get("carrier")
+        
+        # Fall back to phoneCarrier field
+        return camera_data.get("phoneCarrier")
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            esim = status.get("eSim", [])
+            
+            attrs["available_carriers"] = []
+            for i, sim in enumerate(esim):
+                carrier = sim.get("carrier")
+                if carrier:
+                    attrs["available_carriers"].append(carrier)
+                    if sim.get("activeFlag") == 1:
+                        attrs["active_iccid"] = sim.get("iccid")
+            
+            # Add serving cell info
+            if "servingCell" in status:
+                serving_cell = status["servingCell"]
+                # Parse: "FDD LTE,311480,LTE BAND 4,2350,-79,221,-15"
+                parts = serving_cell.split(",")
+                if len(parts) >= 7:
+                    attrs["network_type"] = parts[0]
+                    attrs["network_operator"] = parts[1]
+                    attrs["band"] = parts[2]
+                    attrs["frequency"] = f"{parts[3]} MHz"
+                    attrs["rssi"] = f"{parts[4]} dBm"
+        
+        # Add main ICCID if available
+        if "iccid" in camera_data:
+            attrs["main_iccid"] = camera_data["iccid"]
+        
+        return attrs
+
+
+class RevealInternalVoltageSensor(RevealSensorBase):
+    """Internal voltage sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the internal voltage sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "internal_voltage")
+        self._attr_name = "Internal Voltage"
+        self._attr_icon = "mdi:battery-charging"
+        self._attr_device_class = SensorDeviceClass.VOLTAGE
+        self._attr_native_unit_of_measurement = "V"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the internal voltage."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            voltage = status.get("voltageinternal")
+            
+            if voltage:
+                try:
+                    # Remove 'v' or 'V' and convert to float
+                    voltage_str = str(voltage).lower().replace("v", "").strip()
+                    return float(voltage_str)
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            if "voltagesource" in status:
+                attrs["power_source"] = status["voltagesource"]
+        
+        return attrs
+
+
+class RevealExternalVoltageSensor(RevealSensorBase):
+    """External voltage sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the external voltage sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "external_voltage")
+        self._attr_name = "External Voltage"
+        self._attr_icon = "mdi:power-plug"
+        self._attr_device_class = SensorDeviceClass.VOLTAGE
+        self._attr_native_unit_of_measurement = "V"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the external voltage."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            voltage = status.get("voltageexternal")
+            
+            if voltage:
+                try:
+                    # Remove 'v' or 'V' and convert to float
+                    voltage_str = str(voltage).lower().replace("v", "").strip()
+                    return float(voltage_str)
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            if "voltagesource" in status:
+                attrs["power_source"] = status["voltagesource"]
+                attrs["external_power_connected"] = status["voltagesource"] != "Backup"
+        
+        return attrs
+
+
+class RevealFirmwareVersionSensor(RevealSensorBase):
+    """Firmware version sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the firmware version sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "firmware_version")
+        self._attr_name = "Firmware Version"
+        self._attr_icon = "mdi:chip"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the firmware version."""
+        camera_data = self._get_camera_data()
+        return camera_data.get("firmwareVersion")
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "hardwareVersion" in camera_data:
+            attrs["hardware_version"] = camera_data["hardwareVersion"]
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            if "mcuVersion" in status:
+                attrs["mcu_version"] = status["mcuVersion"]
+            if "appVersion" in status:
+                attrs["app_version"] = status["appVersion"]
+        
+        if "firmwareStatus" in camera_data:
+            attrs["firmware_status"] = camera_data["firmwareStatus"]
+        
+        if "planTier" in camera_data:
+            attrs["plan_tier"] = camera_data["planTier"]
+        
+        return attrs
+
+
+class RevealCameraTemperatureSensor(RevealSensorBase):
+    """Camera internal temperature sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the camera temperature sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "camera_temperature")
+        self._attr_name = "Camera Temperature"
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:thermometer"
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return the camera internal temperature."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            temperature = status.get("temperature")
+            
+            if temperature is not None:
+                try:
+                    return float(temperature)
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            temp = status.get("temperature")
+            if temp is not None:
+                try:
+                    celsius = float(temp)
+                    fahrenheit = (celsius * 9/5) + 32
+                    attrs["temperature_fahrenheit"] = round(fahrenheit, 1)
+                except (ValueError, TypeError):
+                    pass
+        
+        return attrs
+
+
+class RevealServingCellSensor(RevealSensorBase):
+    """Serving cell details sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the serving cell sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "serving_cell")
+        self._attr_name = "Serving Cell"
+        self._attr_icon = "mdi:antenna"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the serving cell network type and band."""
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            serving_cell = status.get("servingCell")
+            
+            if serving_cell:
+                # Parse: "FDD LTE,311480,LTE BAND 4,2350,-79,221,-15"
+                parts = serving_cell.split(",")
+                if len(parts) >= 3:
+                    network_type = parts[0]
+                    band = parts[2]
+                    return f"{network_type} - {band}"
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "status" in camera_data:
+            status = camera_data["status"]
+            serving_cell = status.get("servingCell")
+            
+            if serving_cell:
+                # Parse: "FDD LTE,311480,LTE BAND 4,2350,-79,221,-15"
+                parts = serving_cell.split(",")
+                
+                if len(parts) >= 7:
+                    attrs["network_type"] = parts[0]
+                    attrs["network_operator"] = parts[1]
+                    attrs["band"] = parts[2]
+                    attrs["frequency"] = f"{parts[3]} MHz"
+                    attrs["rssi"] = f"{parts[4]} dBm"
+                    attrs["rsrp"] = f"{parts[5]} dBm"
+                    attrs["rsrq"] = f"{parts[6]} dB"
+                    
+                    # Add signal quality interpretation
+                    try:
+                        rssi = int(parts[4])
+                        if rssi >= -70:
+                            attrs["signal_quality"] = "Excellent"
+                        elif rssi >= -85:
+                            attrs["signal_quality"] = "Good"
+                        elif rssi >= -100:
+                            attrs["signal_quality"] = "Fair"
+                        else:
+                            attrs["signal_quality"] = "Poor"
+                    except (ValueError, IndexError):
+                        pass
+                    
+                    # Add operator name mapping for common US carriers
+                    operator_code = parts[1]
+                    operator_names = {
+                        "310260": "T-Mobile",
+                        "310120": "Sprint",
+                        "311480": "Verizon",
+                        "310410": "AT&T",
+                        "310150": "AT&T",
+                        "310170": "AT&T",
+                        "310030": "AT&T",
+                        "311580": "US Cellular",
+                    }
+                    attrs["carrier_name"] = operator_names.get(operator_code, f"Unknown ({operator_code})")
+                
+                # Store raw value
+                attrs["raw_serving_cell"] = serving_cell
+        
+        return attrs
+
+
+class RevealCameraSettingsSensor(RevealSensorBase):
+    """Camera settings sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the camera settings sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "camera_settings")
+        self._attr_name = "Camera Settings"
+        self._attr_icon = "mdi:camera-settings"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the camera mode."""
+        camera_data = self._get_camera_data()
+        
+        if "settings" in camera_data:
+            settings = camera_data["settings"]
+            
+            # Find camera mode setting
+            for setting in settings:
+                if setting.get("option") == "Camera Mode":
+                    return setting.get("function", "Unknown")
+        
+        return "Unknown"
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes with all camera settings."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "settings" in camera_data:
+            settings = camera_data["settings"]
+            
+            # Parse all settings into readable attributes
+            for setting in settings:
+                option = setting.get("option")
+                function = setting.get("function")
+                
+                if option and function:
+                    # Convert option name to attribute key
+                    attr_key = option.lower().replace(" ", "_").replace("-", "_")
+                    
+                    # Store the setting value
+                    attrs[attr_key] = function
+                    
+                    # Add specific interpretations for key settings
+                    if option == "Image Size":
+                        attrs["photo_resolution"] = function
+                    elif option == "Video Size":
+                        attrs["video_resolution"] = function
+                    elif option == "Video Length":
+                        attrs["video_duration"] = f"{function} seconds"
+                    elif option == "Multi Shot":
+                        if function != "1P":
+                            attrs["burst_mode"] = function
+                    elif option == "Night Mode":
+                        attrs["night_mode_setting"] = function
+                    elif option == "Flash Type":
+                        attrs["flash_type"] = function
+                    elif option == "Motion Sensitivity":
+                        if function.startswith("Level "):
+                            attrs["motion_detection_level"] = function
+                        elif function == "OFF":
+                            attrs["motion_detection_level"] = "Disabled"
+                        else:
+                            attrs["motion_detection_level"] = function
+                    elif option == "GPS Switch":
+                        attrs["gps_enabled"] = function == "ON"
+                    elif option == "FTP":
+                        attrs["ftp_enabled"] = function == "ON"
+                    elif option == "SD Loop":
+                        attrs["sd_loop_recording"] = function == "ON"
+        
+        # Add other camera configuration info
+        if "activeGps" in camera_data:
+            attrs["gps_active"] = camera_data["activeGps"] == "on"
+        
+        if "location" in camera_data:
+            attrs["camera_location"] = camera_data["location"]
+        
+        if "zip" in camera_data:
+            attrs["zip_code"] = camera_data["zip"]
+        
+        return attrs
+
+
+class RevealPhotosTakenSensor(RevealSensorBase):
+    """Photos taken sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the photos taken sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "photos_taken")
+        self._attr_name = "Photos Taken"
+        self._attr_icon = "mdi:camera-burst"
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    @property
+    def native_value(self) -> Optional[int]:
+        """Return the number of photos taken."""
+        camera_data = self._get_camera_data()
+        
+        if "usage" in camera_data:
+            photos = camera_data["usage"].get("photos")
+            if photos is not None:
+                try:
+                    return int(photos)
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "usage" in camera_data:
+            usage = camera_data["usage"]
+            if "storedPhotos" in usage:
+                stored = usage["storedPhotos"]
+                photos = usage.get("photos", 0)
+                try:
+                    attrs["transmitted_photos"] = int(photos) - int(stored)
+                except (ValueError, TypeError):
+                    pass
+        
+        return attrs
+
+
+class RevealStoredPhotosSensor(RevealSensorBase):
+    """Stored photos sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the stored photos sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "stored_photos")
+        self._attr_name = "Stored Photos"
+        self._attr_icon = "mdi:sd"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> Optional[int]:
+        """Return the number of stored photos."""
+        camera_data = self._get_camera_data()
+        
+        if "usage" in camera_data:
+            stored = camera_data["usage"].get("storedPhotos")
+            if stored is not None:
+                try:
+                    return int(stored)
+                except (ValueError, TypeError):
+                    pass
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        if "usage" in camera_data:
+            usage = camera_data["usage"]
+            photos = usage.get("photos", 0)
+            stored = usage.get("storedPhotos", 0)
+            
+            try:
+                attrs["total_photos"] = int(photos)
+                attrs["pending_transmission"] = int(stored) > 0
+            except (ValueError, TypeError):
+                pass
         
         return attrs

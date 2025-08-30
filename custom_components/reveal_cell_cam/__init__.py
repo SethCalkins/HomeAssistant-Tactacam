@@ -12,7 +12,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.CAMERA, Platform.SENSOR, Platform.BINARY_SENSOR]
 SCAN_INTERVAL = timedelta(minutes=5)
 
 
