@@ -69,6 +69,7 @@ async def async_setup_entry(
                 RevealCameraSettingsSensor(coordinator, camera_id, camera_name),
                 RevealPhotosTakenSensor(coordinator, camera_id, camera_name),
                 RevealStoredPhotosSensor(coordinator, camera_id, camera_name),
+                RevealWarrantyExpirationSensor(coordinator, camera_id, camera_name),
             ])
     
     async_add_entities(sensors)
@@ -1323,5 +1324,85 @@ class RevealStoredPhotosSensor(RevealSensorBase):
                 attrs["pending_transmission"] = int(stored) > 0
             except (ValueError, TypeError):
                 pass
+        
+        return attrs
+
+
+class RevealWarrantyExpirationSensor(RevealSensorBase):
+    """Warranty expiration sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the warranty expiration sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "warranty_expiration")
+        self._attr_name = "Warranty Expiration"
+        self._attr_icon = "mdi:shield-check"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> Optional[datetime]:
+        """Return the warranty expiration date."""
+        camera_data = self._get_camera_data()
+        
+        warranty_date = camera_data.get("cameraWarrantyEndDate")
+        if warranty_date:
+            try:
+                # Parse ISO format timestamp
+                if warranty_date.endswith('Z'):
+                    warranty_date = warranty_date[:-1] + '+00:00'
+                return datetime.fromisoformat(warranty_date)
+            except (ValueError, TypeError) as err:
+                _LOGGER.debug("Failed to parse warranty date %s: %s", warranty_date, err)
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        camera_data = self._get_camera_data()
+        
+        warranty_date_str = camera_data.get("cameraWarrantyEndDate")
+        if warranty_date_str:
+            try:
+                # Parse warranty date
+                if warranty_date_str.endswith('Z'):
+                    warranty_date_str = warranty_date_str[:-1] + '+00:00'
+                warranty_date = datetime.fromisoformat(warranty_date_str)
+                
+                # Calculate days remaining
+                from homeassistant.util import dt as dt_util
+                current_time = dt_util.utcnow()
+                time_remaining = warranty_date - current_time
+                
+                if time_remaining.total_seconds() > 0:
+                    days_remaining = time_remaining.days
+                    attrs["days_remaining"] = days_remaining
+                    
+                    if days_remaining > 365:
+                        attrs["warranty_status"] = "Active - More than 1 year"
+                    elif days_remaining > 180:
+                        attrs["warranty_status"] = "Active - More than 6 months"
+                    elif days_remaining > 90:
+                        attrs["warranty_status"] = "Active - More than 3 months"
+                    elif days_remaining > 30:
+                        attrs["warranty_status"] = "Active - Expiring soon"
+                    else:
+                        attrs["warranty_status"] = f"Active - Expires in {days_remaining} days"
+                else:
+                    attrs["warranty_status"] = "Expired"
+                    attrs["days_expired"] = abs(time_remaining.days)
+                    
+            except (ValueError, TypeError):
+                pass
+        
+        # Add registration status
+        if "registrationStatus" in camera_data:
+            attrs["registration_status"] = camera_data["registrationStatus"]
+        
+        # Add first activation date
+        if "firstActivationTime" in camera_data:
+            attrs["first_activated"] = camera_data["firstActivationTime"]
         
         return attrs

@@ -355,6 +355,407 @@ class RevealCellCamAPI:
             "photos": all_photos  # Keep last 20 photos for history
         }
 
+    async def update_camera_settings(self, camera_id: str, settings: List[Dict[str, Any]]) -> bool:
+        """Update camera settings.
+        
+        Args:
+            camera_id: The camera ID to update
+            settings: List of settings to update
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not await self._ensure_authenticated():
+            return False
+        
+        session = await self._ensure_session()
+        url = f"{API_BASE_URL}/{API_VERSION}/cameras/{camera_id}"
+        
+        headers = self._get_headers()
+        
+        # Prepare the payload
+        payload = {
+            "settings": settings
+        }
+        
+        try:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status == 200:
+                    _LOGGER.info("Successfully updated settings for camera %s", camera_id)
+                    return True
+                else:
+                    _LOGGER.error("Failed to update camera settings: HTTP %s", response.status)
+                    text = await response.text()
+                    _LOGGER.debug("Response: %s", text[:500])
+                    return False
+                    
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error updating camera settings: %s", err)
+            return False
+
+    async def set_motion_sensitivity(self, camera_id: str, level: int) -> bool:
+        """Set motion sensitivity for a camera.
+        
+        Args:
+            camera_id: The camera ID
+            level: Sensitivity level (0 = OFF, 1-9 = levels)
+            
+        Returns:
+            True if successful
+        """
+        # Get current camera settings first
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            _LOGGER.error("Camera %s not found or has no settings", camera_id)
+            return False
+        
+        # Copy all current settings
+        settings = camera["settings"].copy()
+        
+        # Update motion sensitivity
+        for setting in settings:
+            if setting.get("option") == "Motion Sensitivity":
+                setting["code"] = f"{level}#"
+                if level == 0:
+                    setting["function"] = "OFF"
+                else:
+                    setting["function"] = f"Level {level}" if level > 0 else str(level)
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_camera_mode(self, camera_id: str, mode: str) -> bool:
+        """Set camera mode.
+        
+        Args:
+            camera_id: The camera ID
+            mode: "photo" or "photo_video"
+            
+        Returns:
+            True if successful
+        """
+        # Get current camera settings
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        for setting in settings:
+            if setting.get("option") == "Camera Mode":
+                if mode == "photo":
+                    setting["code"] = "$R01*1#"
+                    setting["function"] = "Photo（Default)"
+                else:
+                    setting["code"] = "$R01*2#"
+                    setting["function"] = "PIC+Video"
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_video_length(self, camera_id: str, length: int) -> bool:
+        """Set video recording length.
+        
+        Args:
+            camera_id: The camera ID
+            length: Video length in seconds (10, 15, 30, etc.)
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        for setting in settings:
+            if setting.get("option") == "Video Length":
+                setting["code"] = f"$V07*{length}#"
+                setting["function"] = f"{length}S"
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def request_photo(self, camera_id: str) -> bool:
+        """Request an on-demand photo from camera.
+        
+        Args:
+            camera_id: The camera ID
+            
+        Returns:
+            True if successful
+        """
+        if not await self._ensure_authenticated():
+            return False
+        
+        session = await self._ensure_session()
+        url = f"{API_BASE_URL}/{API_VERSION}/cameras/{camera_id}/photo-request"
+        
+        headers = self._get_headers()
+        
+        try:
+            async with session.post(url, headers=headers) as response:
+                if response.status == 200:
+                    _LOGGER.info("Successfully requested photo from camera %s", camera_id)
+                    return True
+                else:
+                    _LOGGER.error("Failed to request photo: HTTP %s", response.status)
+                    return False
+                    
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error requesting photo: %s", err)
+            return False
+
+    async def request_video(self, camera_id: str) -> bool:
+        """Request an on-demand video from camera.
+        
+        Args:
+            camera_id: The camera ID
+            
+        Returns:
+            True if successful
+        """
+        if not await self._ensure_authenticated():
+            return False
+        
+        session = await self._ensure_session()
+        url = f"{API_BASE_URL}/{API_VERSION}/cameras/{camera_id}/video-request"
+        
+        headers = self._get_headers()
+        
+        try:
+            async with session.post(url, headers=headers) as response:
+                if response.status == 200:
+                    _LOGGER.info("Successfully requested video from camera %s", camera_id)
+                    return True
+                else:
+                    _LOGGER.error("Failed to request video: HTTP %s", response.status)
+                    return False
+                    
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error requesting video: %s", err)
+            return False
+
+    async def set_night_mode(self, camera_id: str, mode: str) -> bool:
+        """Set night mode for a camera.
+        
+        Args:
+            camera_id: The camera ID
+            mode: "max_range", "balance", or "min_blur"
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        mode_map = {
+            "max_range": ("$NM00*1#", "Max Range"),
+            "balance": ("$NM00*2#", "Balance"),
+            "min_blur": ("$NM00*3#", "Min Blur")
+        }
+        
+        if mode not in mode_map:
+            return False
+        
+        code, function = mode_map[mode]
+        
+        for setting in settings:
+            if setting.get("option") == "Night Mode":
+                setting["code"] = code
+                setting["function"] = function
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_flash_type(self, camera_id: str, flash_type: str) -> bool:
+        """Set flash type for a camera.
+        
+        Args:
+            camera_id: The camera ID
+            flash_type: "low_glow" or "no_glow"
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        flash_map = {
+            "low_glow": ("$FT01*1#", "Low Glow"),
+            "no_glow": ("$FT01*0#", "No Glow")
+        }
+        
+        if flash_type not in flash_map:
+            return False
+        
+        code, function = flash_map[flash_type]
+        
+        for setting in settings:
+            if setting.get("option") == "Flash Type":
+                setting["code"] = code
+                setting["function"] = function
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_multi_shot(self, camera_id: str, count: int, interval: int) -> bool:
+        """Set multi-shot (burst mode) settings.
+        
+        Args:
+            camera_id: The camera ID
+            count: Number of photos (1-9)
+            interval: Seconds between shots
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        # Build the function string
+        if count == 1:
+            function = "1P"
+            code = "$N09*01+0#"
+        else:
+            function = f"{count}P/{interval}s"
+            code = f"$N09*{count:02d}+{interval}#"
+        
+        for setting in settings:
+            if setting.get("option") == "Multi Shot":
+                setting["code"] = code
+                setting["function"] = function
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_image_resolution(self, camera_id: str, resolution: str) -> bool:
+        """Set image resolution.
+        
+        Args:
+            camera_id: The camera ID
+            resolution: "4k" or "2.5k"
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        res_map = {
+            "4k": ("$S00*32#", "32M(UHD 4K)"),
+            "2.5k": ("$S00*20#", "20M(WQHD 2.5K)")
+        }
+        
+        if resolution not in res_map:
+            return False
+        
+        code, function = res_map[resolution]
+        
+        for setting in settings:
+            if setting.get("option") == "Image Size":
+                setting["code"] = code
+                setting["function"] = function
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
+    async def set_video_resolution(self, camera_id: str, resolution: str) -> bool:
+        """Set video resolution.
+        
+        Args:
+            camera_id: The camera ID
+            resolution: "1080p", "720p", or "wvga"
+            
+        Returns:
+            True if successful
+        """
+        cameras = await self.get_cameras()
+        camera = None
+        for cam in cameras:
+            if cam.get("cameraId") == camera_id:
+                camera = cam
+                break
+        
+        if not camera or "settings" not in camera:
+            return False
+        
+        settings = camera["settings"].copy()
+        
+        res_map = {
+            "1080p": ("$V06*2#", "FHD 1080P"),
+            "720p": ("$V06*1#", "HD 720P"),
+            "wvga": ("$V06*0#", "WVGA")
+        }
+        
+        if resolution not in res_map:
+            return False
+        
+        code, function = res_map[resolution]
+        
+        for setting in settings:
+            if setting.get("option") == "Video Size":
+                setting["code"] = code
+                setting["function"] = function
+                break
+        
+        return await self.update_camera_settings(camera_id, settings)
+
     async def close(self) -> None:
         """Close the session."""
         if self.session:

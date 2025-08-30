@@ -14,3 +14,212 @@ refresh_camera:
 refresh_all:
   name: Refresh All Cameras
   description: Manually refresh photos from all cameras
+
+set_motion_sensitivity:
+  name: Set Motion Sensitivity
+  description: Set the motion detection sensitivity level for a camera
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    level:
+      name: Sensitivity Level
+      description: Motion sensitivity level (0 = OFF, 1-9 = sensitivity levels)
+      required: true
+      selector:
+        select:
+          options:
+            - label: "OFF"
+              value: "0"
+            - label: "Level 1 (Lowest)"
+              value: "1"
+            - label: "Level 2"
+              value: "2"
+            - label: "Level 3"
+              value: "3"
+            - label: "Level 4"
+              value: "4"
+            - label: "Level 5 (Medium)"
+              value: "5"
+            - label: "Level 6"
+              value: "6"
+            - label: "Level 7"
+              value: "7"
+            - label: "Level 8"
+              value: "8"
+            - label: "Level 9 (Highest)"
+              value: "9"
+
+set_camera_mode:
+  name: Set Camera Mode
+  description: Set the camera capture mode
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    mode:
+      name: Camera Mode
+      description: Capture mode for the camera
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Photo Only"
+              value: "photo"
+            - label: "Photo + Video"
+              value: "photo_video"
+
+set_video_length:
+  name: Set Video Length
+  description: Set the video recording length
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    length:
+      name: Video Length
+      description: Length of video recordings in seconds
+      required: true
+      selector:
+        select:
+          options:
+            - label: "10 seconds"
+              value: "10"
+            - label: "15 seconds"
+              value: "15"
+            - label: "30 seconds"
+              value: "30"
+
+request_photo:
+  name: Request Photo
+  description: Request an on-demand photo from the camera
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+
+request_video:
+  name: Request Video
+  description: Request an on-demand video from the camera
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+
+set_night_mode:
+  name: Set Night Mode
+  description: Set the night mode setting for low light conditions
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    mode:
+      name: Night Mode
+      description: Night mode setting
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Max Range"
+              value: "max_range"
+            - label: "Balance"
+              value: "balance"
+            - label: "Min Blur"
+              value: "min_blur"
+
+set_flash_type:
+  name: Set Flash Type
+  description: Set the flash type (important for wildlife)
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    type:
+      name: Flash Type
+      description: Flash type setting
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Low Glow"
+              value: "low_glow"
+            - label: "No Glow"
+              value: "no_glow"
+
+set_multi_shot:
+  name: Set Multi-Shot Mode
+  description: Configure burst mode settings
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    count:
+      name: Photo Count
+      description: Number of photos to take in burst mode
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 9
+          mode: slider
+    interval:
+      name: Interval
+      description: Seconds between shots
+      required: true
+      selector:
+        select:
+          options:
+            - label: "0 seconds"
+              value: "0"
+            - label: "1 second"
+              value: "1"
+            - label: "2 seconds"
+              value: "2"
+
+set_image_resolution:
+  name: Set Image Resolution
+  description: Set the photo resolution
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    resolution:
+      name: Resolution
+      description: Photo resolution setting
+      required: true
+      selector:
+        select:
+          options:
+            - label: "4K (UHD)"
+              value: "4k"
+            - label: "2.5K (WQHD)"
+              value: "2.5k"
+
+set_video_resolution:
+  name: Set Video Resolution
+  description: Set the video recording resolution
+  target:
+    entity:
+      integration: reveal_cell_cam
+      domain: camera
+  fields:
+    resolution:
+      name: Resolution
+      description: Video resolution setting
+      required: true
+      selector:
+        select:
+          options:
+            - label: "FHD 1080P"
+              value: "1080p"
+            - label: "HD 720P"
+              value: "720p"
+            - label: "WVGA"
+              value: "wvga"
