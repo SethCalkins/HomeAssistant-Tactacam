@@ -52,6 +52,7 @@ async def async_setup_entry(
                 RevealTemperatureSensor(coordinator, camera_id, camera_name),
                 RevealPhotoCountSensor(coordinator, camera_id, camera_name),
                 RevealWindSpeedSensor(coordinator, camera_id, camera_name),
+                RevealWindDirectionSensor(coordinator, camera_id, camera_name),
                 RevealPressureSensor(coordinator, camera_id, camera_name),
                 RevealMoonPhaseSensor(coordinator, camera_id, camera_name),
                 RevealWeatherSensor(coordinator, camera_id, camera_name),
@@ -382,6 +383,73 @@ class RevealWindSpeedSensor(RevealSensorBase):
             
             if "windGust" in weather_data:
                 attrs["gust_speed"] = weather_data["windGust"]
+        
+        return attrs
+
+
+class RevealWindDirectionSensor(RevealSensorBase):
+    """Wind direction sensor for Reveal Cell Cam."""
+
+    def __init__(
+        self, coordinator: DataUpdateCoordinator, camera_id: str, camera_name: str
+    ) -> None:
+        """Initialize the wind direction sensor."""
+        super().__init__(coordinator, camera_id, camera_name, "wind_direction")
+        self._attr_name = "Wind Direction"
+        self._attr_icon = "mdi:compass"
+
+    @property
+    def native_value(self) -> Optional[str]:
+        """Return the wind direction."""
+        photo = self._get_latest_photo()
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            # Handle wind direction as string or object
+            wind_dir = weather_data.get("windDirection")
+            if wind_dir:
+                if isinstance(wind_dir, dict):
+                    # If it's an object, get the cardinal direction
+                    return wind_dir.get("cardinalLabel") or wind_dir.get("direction")
+                else:
+                    # If it's a string, return it directly
+                    return wind_dir
+        
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return extra attributes."""
+        attrs = {}
+        photo = self._get_latest_photo()
+        
+        weather_data = None
+        if photo:
+            weather_data = photo.get("weatherData") or photo.get("weatherRecord") or photo.get("weather")
+        
+        if weather_data:
+            wind_dir = weather_data.get("windDirection")
+            if wind_dir and isinstance(wind_dir, dict):
+                # If wind direction is an object, extract all available data
+                if "degrees" in wind_dir:
+                    attrs["degrees"] = wind_dir["degrees"]
+                if "speed" in wind_dir:
+                    attrs["wind_speed"] = wind_dir["speed"]
+                if "cardinalLabel" in wind_dir:
+                    attrs["cardinal"] = wind_dir["cardinalLabel"]
+                elif "direction" in wind_dir:
+                    attrs["cardinal"] = wind_dir["direction"]
+            
+            # Also check for wind speed if available separately
+            if "windSpeed" in weather_data:
+                attrs["wind_speed"] = weather_data["windSpeed"]
+            
+            # Add wind gust if available
+            if "windGust" in weather_data:
+                attrs["wind_gust"] = weather_data["windGust"]
         
         return attrs
 

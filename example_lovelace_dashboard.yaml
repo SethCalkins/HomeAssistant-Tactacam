@@ -1,0 +1,128 @@
+# Example Lovelace Dashboard Configuration for Tactacam Reveal Cameras
+# Add this to your Home Assistant dashboard configuration
+
+title: Trail Cameras
+views:
+  - title: Cameras
+    path: cameras
+    cards:
+      # Camera Grid View - Shows both cameras side by side
+      - type: horizontal-stack
+        cards:
+          - type: picture-entity
+            entity: camera.ao_cam01
+            name: AO-CAM01
+            camera_view: auto
+            show_state: true
+            
+          - type: picture-entity
+            entity: camera.ao_cam02
+            name: AO-CAM02
+            camera_view: auto
+            show_state: true
+
+      # Alternative: Picture Glance Cards with sensors
+      - type: horizontal-stack
+        cards:
+          - type: picture-glance
+            title: AO-CAM01
+            entity: camera.ao_cam01
+            camera_view: auto
+            entities:
+              - sensor.ao_cam01_battery
+              - sensor.ao_cam01_signal
+              - sensor.ao_cam01_temperature
+              - sensor.ao_cam01_wind_direction
+              
+          - type: picture-glance
+            title: AO-CAM02
+            entity: camera.ao_cam02
+            camera_view: auto
+            entities:
+              - sensor.ao_cam02_battery
+              - sensor.ao_cam02_signal
+              - sensor.ao_cam02_temperature
+              - sensor.ao_cam02_wind_direction
+
+      # Camera Details Cards
+      - type: vertical-stack
+        title: AO-CAM01 Details
+        cards:
+          - type: picture-entity
+            entity: camera.ao_cam01
+            camera_view: auto
+            
+          - type: entities
+            entities:
+              - sensor.ao_cam01_last_photo
+              - sensor.ao_cam01_photo_count
+              - sensor.ao_cam01_battery
+              - sensor.ao_cam01_signal
+              - sensor.ao_cam01_temperature
+              - sensor.ao_cam01_wind_speed
+              - sensor.ao_cam01_wind_direction
+              - sensor.ao_cam01_pressure
+              - sensor.ao_cam01_moon_phase
+
+      - type: vertical-stack
+        title: AO-CAM02 Details
+        cards:
+          - type: picture-entity
+            entity: camera.ao_cam02
+            camera_view: auto
+            
+          - type: entities
+            entities:
+              - sensor.ao_cam02_last_photo
+              - sensor.ao_cam02_photo_count
+              - sensor.ao_cam02_battery
+              - sensor.ao_cam02_signal
+              - sensor.ao_cam02_temperature
+              - sensor.ao_cam02_wind_speed
+              - sensor.ao_cam02_wind_direction
+              - sensor.ao_cam02_pressure
+              - sensor.ao_cam02_moon_phase
+
+# Alternative configuration using auto-entities (requires auto-entities card from HACS)
+  - title: All Cameras (Auto)
+    path: cameras-auto
+    cards:
+      - type: custom:auto-entities
+        card:
+          type: grid
+          columns: 2
+          square: true
+        filter:
+          include:
+            - domain: camera
+              integration: reveal_cell_cam
+        sort:
+          method: name
+
+# Simpler configuration - just the camera feeds
+  - title: Simple View
+    path: simple
+    cards:
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: camera
+            entity: camera.ao_cam01
+            
+          - type: camera
+            entity: camera.ao_cam02
+
+# Configuration for a single camera card with live view
+  - title: Live View
+    path: live
+    cards:
+      - type: picture-entity
+        entity: camera.ao_cam01
+        camera_view: live
+        name: AO-CAM01 Live
+        
+      - type: picture-entity
+        entity: camera.ao_cam02
+        camera_view: live
+        name: AO-CAM02 Live

@@ -29,8 +29,20 @@ async def async_setup_entry(
 
     cameras = []
     for camera_data in coordinator.data.get("cameras", []):
+        camera_id = camera_data.get("cameraId", "unknown")
+        camera_name = camera_data.get("cameraName") or camera_data.get("cameraLocation") or camera_data.get("name") or f"Camera {camera_id[-4:]}"
+        _LOGGER.info("Setting up camera entity: %s (ID: %s)", camera_name, camera_id)
+        
+        # Log if latest_photo exists
+        if "latest_photo" in camera_data:
+            has_url = "photoUrl" in camera_data["latest_photo"]
+            _LOGGER.info("Camera %s has latest_photo with photoUrl: %s", camera_name, has_url)
+        else:
+            _LOGGER.warning("Camera %s has no latest_photo data", camera_name)
+            
         cameras.append(RevealCellCamCamera(coordinator, camera_data, api))
 
+    _LOGGER.info("Created %d camera entities", len(cameras))
     async_add_entities(cameras, update_before_add=True)
 
 
@@ -50,8 +62,9 @@ class RevealCellCamCamera(CoordinatorEntity, Camera):
         self._camera_data = camera_data
         self._api = api
         self._camera_id = camera_data.get("cameraId", "")
-        self._camera_name = camera_data.get("cameraName", f"Camera {self._camera_id[-4:]}")
-        self._attr_name = f"Reveal {self._camera_name}"
+        # Try multiple fields for camera name, matching sensor.py logic
+        self._camera_name = camera_data.get("cameraName") or camera_data.get("cameraLocation") or camera_data.get("name") or f"Camera {self._camera_id[-4:]}"
+        self._attr_name = self._camera_name
         self._attr_unique_id = f"reveal_cell_cam_{self._camera_id}"
         
         # Enable stream support if available
@@ -60,12 +73,14 @@ class RevealCellCamCamera(CoordinatorEntity, Camera):
         # Device info with more details
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._camera_id)},
-            name=self._attr_name,
+            name=self._camera_name,  # Use camera name directly for device
             manufacturer="Tactacam",
             model=camera_data.get("cameraModel", "Reveal Cell Cam"),
             sw_version=camera_data.get("firmwareVersion"),
             hw_version=camera_data.get("hardwareVersion"),
         )
+        
+        _LOGGER.debug("Initialized camera entity: %s with unique_id: %s", self._attr_name, self._attr_unique_id)
         
         self._image_url: Optional[str] = None
         self._image: Optional[bytes] = None
