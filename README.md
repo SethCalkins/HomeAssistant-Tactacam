@@ -77,7 +77,7 @@ For each camera in your account, the integration creates a camera entity with th
 | Attribute | Description | Example |
 |-----------|-------------|---------|
 | `camera_id` | Unique camera identifier | "016578004295819" |
-| `camera_name` | Camera display name | "AO-CAM01" |
+| `camera_name` | Camera display name | "CAM01" |
 | `location` | Camera location/description | "North Field" |
 | `status` | Camera status | "active" |
 | `total_photos` | Total photos taken | 1543 |
@@ -89,7 +89,7 @@ For each camera in your account, the integration creates a camera entity with th
 | `wind_speed` | Wind speed (mph) | 4.4 |
 | `wind_direction` | Wind direction | "NW" |
 | `barometric_pressure` | Pressure (inHg) | 30.21 |
-| `gps_coordinates` | GPS location | "39.90803, -85.92407" |
+| `gps_coordinates` | GPS location | "00.90803, -00.92407" |
 | `last_photo_time` | Last photo timestamp | "2025-08-26T21:31:20.000Z" |
 | `average_battery` | Average battery level | 95.5 |
 | `average_signal` | Average signal strength | 3.8 |
