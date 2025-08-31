@@ -102,7 +102,7 @@ To create a dashboard showing all your cameras:
 type: grid
 cards:
   - type: picture-entity
-    entity: camera.reveal_ao_cam01
+    entity: camera.reveal_cam01
     name: North Field Camera
     camera_view: live
     show_state: false
@@ -122,15 +122,15 @@ automation:
   - alias: "Trail Camera Motion Alert"
     trigger:
       - platform: state
-        entity_id: camera.reveal_camera_ao_cam01
+        entity_id: camera.reveal_camera_cam01
         attribute: last_photo_time
     action:
       - service: notify.mobile_app_your_phone
         data:
           title: "Trail Camera Alert"
-          message: "New photo captured at {{ state_attr('camera.reveal_camera_ao_cam01', 'last_photo_time') }}"
+          message: "New photo captured at {{ state_attr('camera.reveal_camera_cam01', 'last_photo_time') }}"
           data:
-            image: "/api/camera_proxy/camera.reveal_camera_ao_cam01"
+            image: "/api/camera_proxy/camera.reveal_camera_cam01"
 ```
 
 ### Low battery warning
@@ -140,14 +140,14 @@ automation:
   - alias: "Trail Camera Low Battery"
     trigger:
       - platform: numeric_state
-        entity_id: camera.reveal_camera_ao_cam01
+        entity_id: camera.reveal_camera_cam01
         attribute: battery_level
         below: 20
     action:
       - service: notify.mobile_app_your_phone
         data:
           title: "Trail Camera Battery Low"
-          message: "Battery level is {{ state_attr('camera.reveal_camera_ao_cam01', 'battery_level') }}%"
+          message: "Battery level is {{ state_attr('camera.reveal_camera_cam01', 'battery_level') }}%"
 ```
 
 ## Troubleshooting
